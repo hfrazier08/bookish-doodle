@@ -38,6 +38,9 @@ function keywords(c) {
   return q || "cars";
 }
 
+// Some sites only accept one model year in their links.
+const singleYear = (c) => c.yearMin && c.yearMin === c.yearMax;
+
 function conditionPath(c, { used = "used", new: nw = "new", any = "all" } = {}) {
   if (c.condition === "used" || c.condition === "cpo") return used;
   if (c.condition === "new") return nw;
@@ -178,7 +181,7 @@ const SOURCES = [
       qs({
         inventorytype: { used: "used", cpo: "cpo", new: "new" }[c.condition] || "used,cpo,new",
         make: slug(c.make),
-        model: c.make && c.model ? `${slug(c.make)}|${slug(c.model)}` : "",
+        model: c.make && c.model ? slug(c.model) : "",
         zip: c.zip,
         radius: c.radius,
       }),
@@ -258,8 +261,10 @@ const SOURCES = [
     blurb: "Buy online, 7-day return, home delivery.",
     filters: ["make", "model"],
     url: (c) => {
-      if (c.make && c.model) return `https://www.carvana.com/cars/${slug(c.make)}-${slug(c.model)}`;
-      if (c.make) return `https://www.carvana.com/cars/${slug(c.make)}`;
+      // Carvana's links only carry make, model and a single year; other filters are set on the site.
+      const year = singleYear(c) ? `${c.yearMin}-` : "";
+      if (c.make && c.model) return `https://www.carvana.com/cars/${year}${slug(c.make)}-${slug(c.model)}`;
+      if (c.make) return `https://www.carvana.com/cars/${year}${slug(c.make)}`;
       return "https://www.carvana.com/cars";
     },
   },
@@ -272,7 +277,10 @@ const SOURCES = [
     url: (c) => {
       const path = ["cars"];
       if (c.make) path.push(slug(c.make));
-      if (c.make && c.model) path.push(slug(c.model));
+      if (c.make && c.model) {
+        path.push(slug(c.model));
+        if (singleYear(c)) path.push(c.yearMin);
+      }
       return `https://www.carmax.com/${path.join("/")}`;
     },
   },
@@ -327,13 +335,15 @@ const SOURCES = [
     category: "private",
     blurb: "Local private and dealer ads.",
     filters: ["make", "model", "zip", "radius", "year", "price", "miles"],
-    note: "Uses the Craigslist region you set under More options.",
+    note: "Needs your ZIP code (or a Craigslist region under More options).",
     url: (c) => {
+      // With a ZIP, craigslist.org routes to the nearest city on its own; otherwise use the region.
       const region = slug(c.clRegion);
-      if (!region) return "https://www.craigslist.org/about/sites";
+      if (!c.zip && !region) return "https://www.craigslist.org/about/sites";
       return (
-        `https://${region}.craigslist.org/search/cta` +
+        (c.zip ? "https://www.craigslist.org/search/cta" : `https://${region}.craigslist.org/search/cta`) +
         qs({
+          cat: c.zip ? "cta" : "",
           query: keywords(c) === "cars" ? "" : keywords(c),
           postal: c.zip,
           search_distance: c.radius,
@@ -401,7 +411,7 @@ const SOURCES = [
     blurb: "Ex-rental fleet, 7-day buyback.",
     filters: [],
     note: "Enter your search on Enterprise.",
-    url: () => "https://www.enterprisecarsales.com/list/buy-a-car/",
+    url: () => "https://www.enterprisecarsales.com/search",
   },
   {
     id: "avis",
@@ -466,9 +476,10 @@ const SOURCES = [
     name: "ClassicCars.com",
     category: "classic",
     blurb: "Large classic and collector listings.",
-    filters: ["make", "model"],
+    filters: ["make", "model", "year"],
     url: (c) => {
-      const path = ["listings", "find"];
+      const years = c.yearMin || c.yearMax ? `${c.yearMin || 1900}-${c.yearMax || "current"}` : "all-years";
+      const path = ["listings", "find", years];
       if (c.make) path.push(slug(c.make));
       if (c.make && c.model) path.push(slug(c.model));
       return `https://classiccars.com/${path.join("/")}`;

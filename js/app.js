@@ -150,6 +150,13 @@
   let currentLinks = [];
 
   function renderResults(c) {
+    renderLinks(c);
+    $("#results").hidden = false;
+    loadListings(c, true);
+  }
+
+  // Rebuild every site link from the given criteria.
+  function renderLinks(c) {
     const cats = selectedCategories();
     const on = activeFilters(c);
     const groups = $("#result-groups");
@@ -199,9 +206,23 @@
 
     $("#result-count").textContent = currentLinks.length;
     $("#result-summary").textContent = summarize(c);
-    $("#results").hidden = false;
-    loadListings(c, true);
   }
+
+  // Keep the links in sync with the form, so a link never carries stale details
+  // when the buyer edits the form after searching without pressing search again.
+  let linkTimer;
+  function syncLinks() {
+    if ($("#results").hidden) return;
+    clearTimeout(linkTimer);
+    linkTimer = setTimeout(() => {
+      const c = readCriteria();
+      renderLinks(c);
+      store.set("carscout.lastSearch", c);
+      history.replaceState(null, "", `?${criteriaToQuery(c)}${location.hash}`);
+    }, 200);
+  }
+  form.addEventListener("input", syncLinks);
+  form.addEventListener("change", syncLinks);
 
   // ---------- Opening sites without fighting pop-up blockers ----------
   //
