@@ -38,6 +38,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 
@@ -164,6 +165,57 @@ fieldset.range legend { padding: 0; margin-bottom: 4px; }
 .research { margin-top: 32px; }
 .research h3 { margin: 0 0 12px; font-size: 1.05rem; }
 .link-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- Listings ---------- */
+.listings { margin-top: 20px; }
+.listings-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.listings-head h3 { margin: 0; font-size: 1.25rem; }
+.listings-controls { display: flex; align-items: center; gap: 8px; }
+label.inline { flex-direction: row; align-items: center; gap: 8px; }
+label.inline select { width: auto; padding: 6px 8px; font-size: 0.9rem; }
+#listings-status { margin: 8px 0 12px; font-size: 0.9rem; }
+
+.key-card { margin-top: 12px; }
+.key-card h4 { margin: 0 0 6px; font-size: 1.05rem; }
+.key-card p { margin: 0 0 12px; }
+.key-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.key-row input { flex: 1 1 260px; }
+
+.listings-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+.listing {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.listing:hover { border-color: var(--accent); }
+.listing-photo {
+  position: relative; display: block; aspect-ratio: 4 / 3; background: var(--off); overflow: hidden;
+}
+.listing-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.no-photo { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 0.9rem; }
+.photo-count {
+  position: absolute; right: 8px; bottom: 8px; background: rgba(0, 0, 0, 0.65); color: #fff;
+  font-size: 0.75rem; padding: 2px 8px; border-radius: 999px;
+}
+.listing-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.listing-price { font-size: 1.3rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.listing h4 { margin: 0; font-size: 0.975rem; line-height: 1.3; }
+.listing h4 a { color: var(--text); text-decoration: none; }
+.listing h4 a:hover { text-decoration: underline; }
+.listing p { margin: 0; }
+.listing-dealer { margin-top: auto !important; padding-top: 6px; }
+.listing-actions { display: flex; gap: 8px; margin-top: 8px; }
+.listing-actions .btn { flex: 1; }
+.tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.tag { font-size: 0.72rem; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--off); color: var(--muted); }
+.tag.good { background: var(--good-soft); color: var(--good); }
+.tag.high { background: var(--warn-soft); color: var(--warn); }
+
+.listing.skeleton { min-height: 340px; background: linear-gradient(90deg, var(--off), var(--surface), var(--off)); background-size: 200% 100%; animation: shimmer 1.2s infinite; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+.actions.center { justify-content: center; }
+
+.sites-title { margin: 40px 0 4px; font-size: 1.25rem; }
+.sites-sub { margin: 0; }
 
 /* ---------- Sections ---------- */
 .section { padding-top: 56px; }

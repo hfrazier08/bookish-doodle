@@ -29,7 +29,7 @@
         <h1>Search every car site at once.</h1>
         <p class="lede">Tell us what you want once. We build a pre-filled search on
           <strong id="source-count">25+</strong> marketplaces, dealers, online retailers,
-          private-seller sites and auctions — so nothing slips through.</p>
+          private-seller sites and auctions, and show dealer listings with photos right here, so nothing slips through.</p>
 
         <form id="search-form" class="card search-form" autocomplete="off">
           <div class="grid">
@@ -119,6 +119,46 @@
           <button type="button" id="copy-link" class="btn ghost">Copy share link</button>
         </div>
       </div>
+      <!-- Live listings with photos (MarketCheck API) -->
+      <div id="listings" class="listings">
+        <div class="listings-head">
+          <h3 id="listings-title">Listings</h3>
+          <div class="listings-controls" id="listings-controls" hidden>
+            <label class="inline">Sort
+              <select id="listings-sort">
+                <option value="">Best match</option>
+                <option value="price:asc">Price: low to high</option>
+                <option value="price:desc">Price: high to low</option>
+                <option value="miles:asc">Mileage: lowest</option>
+                <option value="dist:asc">Distance: nearest</option>
+                <option value="year:desc">Year: newest</option>
+              </select>
+            </label>
+            <button type="button" class="btn small ghost" id="listings-key-change">API key</button>
+          </div>
+        </div>
+
+        <form id="key-form" class="card key-card" hidden>
+          <h4>See listings with photos right here</h4>
+          <p class="muted">Car sites don't let other websites load their listings directly, so CarScout uses
+            <a href="https://www.marketcheck.com/apis" target="_blank" rel="noopener">MarketCheck</a>, a
+            licensed data service that collects listings from dealers across the US. Sign up there for a free
+            API key and paste it below. It's saved only in this browser.</p>
+          <div class="key-row">
+            <input name="key" placeholder="Paste your MarketCheck API key" autocomplete="off" required />
+            <button class="btn primary">Save &amp; load listings</button>
+            <button type="button" class="btn ghost" id="key-remove" hidden>Remove key</button>
+          </div>
+        </form>
+
+        <p id="listings-status" class="muted" aria-live="polite"></p>
+        <div id="listings-grid" class="listings-grid"></div>
+        <div class="actions center"><button type="button" id="listings-more" class="btn ghost" hidden>Load more</button></div>
+      </div>
+
+      <h3 class="sites-title">Search each site directly</h3>
+      <p class="muted sites-sub">Private sellers (Facebook Marketplace, Craigslist, OfferUp), auctions and
+        classic-car sites aren't in the listings above. Check them here.</p>
       <p class="hint muted">Tip: your browser may ask you to allow pop-ups the first time you use “Open all”.
         Each card shows which of your filters that site accepts — <span class="chip on">applied</span> vs
         <span class="chip off">set it there</span>.</p>

@@ -200,6 +200,7 @@
     $("#result-count").textContent = currentLinks.length;
     $("#result-summary").textContent = summarize(c);
     $("#results").hidden = false;
+    loadListings(c, true);
   }
 
   function openMany(urls) {
@@ -253,6 +254,238 @@
     $("#results").hidden = true;
     history.replaceState(null, "", location.pathname);
     store.set("carscout.lastSearch", null);
+  });
+
+  // ======================= LISTINGS (MarketCheck) =======================
+  //
+  // Car sites block other pages from reading their inventory, so real listings come from
+  // MarketCheck's licensed API, which aggregates US dealer inventory and allows browser (CORS) calls.
+  // The buyer supplies their own API key; it never leaves their browser except to MarketCheck.
+
+  const MC_URL = "https://mc-api.marketcheck.com/v2/search/car/active";
+  const PAGE_SIZE = 48;
+  const listingsState = { criteria: null, start: 0, total: 0, items: [], requestId: 0 };
+
+  const getKey = () => store.get("carscout.mcKey", "");
+
+  function marketcheckParams(c, start) {
+    const p = new URLSearchParams({ api_key: getKey(), rows: PAGE_SIZE, start });
+    if (c.make) p.set("make", c.make);
+    if (c.model) p.set("model", c.model);
+    const carType = { used: "used", cpo: "certified", new: "new" }[c.condition];
+    if (carType) p.set("car_type", carType);
+    if (c.zip) {
+      p.set("zip", c.zip);
+      p.set("radius", c.radius || 50);
+    }
+    if (c.yearMin || c.yearMax) p.set("year_range", `${c.yearMin || 1900}-${c.yearMax || new Date().getFullYear() + 1}`);
+    if (c.priceMin || c.priceMax) p.set("price_range", `${c.priceMin || 0}-${c.priceMax || 10000000}`);
+    if (c.milesMax) p.set("miles_range", `0-${c.milesMax}`);
+    const [sortBy, order] = $("#listings-sort").value.split(":");
+    if (sortBy && !(sortBy === "dist" && !c.zip)) {
+      p.set("sort_by", sortBy);
+      p.set("sort_order", order);
+    }
+    return p;
+  }
+
+  function showKeyForm(show) {
+    $("#key-form").hidden = !show;
+    $("#key-remove").hidden = !getKey();
+    if (show) $("#key-form").key.value = getKey();
+  }
+
+  async function loadListings(c, reset) {
+    const status = $("#listings-status");
+    const grid = $("#listings-grid");
+    const more = $("#listings-more");
+
+    if (reset) {
+      listingsState.criteria = c;
+      listingsState.start = 0;
+      listingsState.items = [];
+      grid.innerHTML = "";
+    }
+    more.hidden = true;
+
+    if (!getKey()) {
+      $("#listings-title").textContent = "Listings with photos";
+      $("#listings-controls").hidden = true;
+      status.textContent = "";
+      showKeyForm(true);
+      return;
+    }
+    showKeyForm(false);
+    $("#listings-controls").hidden = false;
+
+    // Ignore responses that arrive after a newer search started.
+    const id = ++listingsState.requestId;
+    status.textContent = reset ? "Loading listings…" : "Loading more…";
+    if (reset) grid.innerHTML = Array.from({ length: 8 }, () => `<div class="listing skeleton"></div>`).join("");
+
+    try {
+      const res = await fetch(`${MC_URL}?${marketcheckParams(listingsState.criteria, listingsState.start)}`);
+      if (id !== listingsState.requestId) return;
+      if (res.status === 401 || res.status === 403) {
+        grid.innerHTML = "";
+        status.innerHTML = `<span class="error">MarketCheck didn't accept that API key.</span>`;
+        showKeyForm(true);
+        return;
+      }
+      if (res.status === 429) throw new Error("You've reached your MarketCheck plan's request limit. Try again later.");
+      if (!res.ok) throw new Error(`MarketCheck returned an error (${res.status}).`);
+      const data = await res.json();
+      if (id !== listingsState.requestId) return;
+
+      const fresh = (data.listings || []).map(normalizeListing);
+      listingsState.items.push(...fresh);
+      listingsState.total = data.num_found || listingsState.items.length;
+      listingsState.start += PAGE_SIZE;
+      renderListings();
+    } catch (err) {
+      if (id !== listingsState.requestId) return;
+      if (reset) grid.innerHTML = "";
+      status.innerHTML = `<span class="error">${escapeHtml(
+        err instanceof TypeError ? "Couldn't reach MarketCheck. Check your connection and try again." : err.message
+      )}</span>`;
+    }
+  }
+
+  function normalizeListing(l) {
+    const b = l.build || {};
+    const d = l.dealer || {};
+    return {
+      id: l.id,
+      vin: l.vin,
+      title: l.heading || [b.year, b.make, b.model, b.trim].filter(Boolean).join(" "),
+      year: b.year ?? null,
+      make: b.make,
+      model: b.model,
+      trim: b.trim,
+      price: Number(l.price) || null,
+      miles: Number.isFinite(Number(l.miles)) && l.miles !== null ? Number(l.miles) : null,
+      photo: (l.media && l.media.photo_links && l.media.photo_links[0]) || "",
+      photoCount: (l.media && l.media.photo_links && l.media.photo_links.length) || 0,
+      url: l.vdp_url,
+      source: l.source || "",
+      dealer: d.name || "",
+      place: [d.city, d.state].filter(Boolean).join(", "),
+      dist: Number.isFinite(Number(l.dist)) && l.dist !== null ? Math.round(Number(l.dist)) : null,
+      daysOnMarket: l.dom ?? null,
+      oneOwner: !!l.carfax_1_owner,
+      cleanTitle: !!l.carfax_clean_title,
+      specs: [b.body_type, b.drivetrain, b.transmission, b.fuel_type].filter(Boolean),
+    };
+  }
+
+  // Compare each car to the median price of similar results (same year/make/model) to flag good deals.
+  function dealBadges(items) {
+    const groups = {};
+    for (const it of items) {
+      if (!it.price) continue;
+      (groups[`${it.year}|${it.make}|${it.model}`] ||= []).push(it.price);
+    }
+    const median = (arr) => {
+      const s = [...arr].sort((a, b) => a - b);
+      const m = s.length >> 1;
+      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    };
+    const out = new Map();
+    for (const it of items) {
+      const prices = groups[`${it.year}|${it.make}|${it.model}`];
+      if (!it.price || !prices || prices.length < 4) continue;
+      const diff = it.price - median(prices);
+      const pct = diff / median(prices);
+      if (pct <= -0.05) out.set(it, { cls: "good", text: `${money(-diff)} below similar` });
+      else if (pct >= 0.1) out.set(it, { cls: "high", text: `${money(diff)} above similar` });
+    }
+    return out;
+  }
+
+  function renderListings() {
+    const { items, total } = listingsState;
+    const grid = $("#listings-grid");
+    const badges = dealBadges(items);
+
+    $("#listings-title").textContent = total
+      ? `${num(total)} listing${total === 1 ? "" : "s"} found`
+      : "Listings";
+    $("#listings-status").textContent = items.length
+      ? `Showing ${num(items.length)} of ${num(total)} dealer listings. Photos and prices come from each dealer's own listing.`
+      : "No dealer listings match. Try widening the distance, price or year range.";
+
+    grid.innerHTML = items
+      .map((it, i) => {
+        const badge = badges.get(it);
+        const tags = [
+          it.oneOwner && `<span class="tag">1 owner</span>`,
+          it.cleanTitle && `<span class="tag">Clean title</span>`,
+          badge && `<span class="tag ${badge.cls}">${badge.text}</span>`,
+        ].filter(Boolean).join("");
+        const meta = [
+          it.miles !== null && `${num(it.miles)} mi`,
+          it.dist !== null && `${it.dist} mi away`,
+          it.daysOnMarket !== null && `${it.daysOnMarket} days listed`,
+        ].filter(Boolean).join(" · ");
+        return `
+          <article class="listing">
+            <a class="listing-photo" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">
+              ${it.photo
+                ? `<img src="${escapeHtml(it.photo)}" alt="${escapeHtml(it.title)}" loading="lazy" referrerpolicy="no-referrer" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'no-photo',textContent:'No photo'}))" />`
+                : `<span class="no-photo">No photo</span>`}
+              ${it.photoCount > 1 ? `<span class="photo-count">📷 ${it.photoCount}</span>` : ""}
+            </a>
+            <div class="listing-body">
+              <div class="listing-price">${it.price ? money(it.price) : "Call for price"}</div>
+              <h4><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.title)}</a></h4>
+              <p class="muted small">${escapeHtml(meta)}</p>
+              ${tags ? `<div class="tags">${tags}</div>` : ""}
+              <p class="muted small listing-dealer">${escapeHtml([it.dealer, it.place].filter(Boolean).join(" — "))}</p>
+              <div class="listing-actions">
+                <a class="btn small primary" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">View listing ↗</a>
+                <button type="button" class="btn small ghost" data-save="${i}">♡ Save</button>
+              </div>
+            </div>
+          </article>`;
+      })
+      .join("");
+
+    $("#listings-more").hidden = items.length >= total;
+  }
+
+  $("#listings-grid").addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-save]");
+    if (!btn) return;
+    const it = listingsState.items[Number(btn.dataset.save)];
+    if (!it || !it.price) return toast("This listing has no price to compare.");
+    addToShortlist({
+      url: it.url,
+      title: it.title,
+      price: it.price,
+      miles: it.miles,
+      year: it.year,
+      distance: it.dist,
+      notes: [it.dealer, it.place, it.vin && `VIN ${it.vin}`].filter(Boolean).join(" · "),
+    });
+    btn.textContent = "♥ Saved";
+    btn.disabled = true;
+  });
+
+  $("#listings-more").addEventListener("click", () => loadListings(listingsState.criteria, false));
+  $("#listings-sort").addEventListener("change", () => {
+    if (listingsState.criteria) loadListings(listingsState.criteria, true);
+  });
+  $("#listings-key-change").addEventListener("click", () => showKeyForm($("#key-form").hidden));
+
+  $("#key-form").addEventListener("submit", (e) => {
+    e.preventDefault();
+    store.set("carscout.mcKey", e.target.key.value.trim());
+    loadListings(listingsState.criteria || readCriteria(), true);
+  });
+  $("#key-remove").addEventListener("click", () => {
+    store.set("carscout.mcKey", "");
+    listingsState.requestId++;
+    loadListings(listingsState.criteria || readCriteria(), true);
   });
 
   // Restore from share link, else last search.
@@ -379,11 +612,18 @@
 
   const optNum = (v) => (v === "" || v == null ? null : Number(v));
 
+  function addToShortlist(item) {
+    if (shortlist.some((s) => s.url === item.url)) return toast("Already on your shortlist.");
+    shortlist.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), ...item });
+    store.set("carscout.shortlist", shortlist);
+    renderShortlist();
+    toast("Added to shortlist.");
+  }
+
   $("#shortlist-form").addEventListener("submit", (e) => {
     e.preventDefault();
     const f = e.target;
-    shortlist.push({
-      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    addToShortlist({
       url: f.url.value.trim(),
       title: f.title.value.trim(),
       price: Number(f.price.value),
@@ -392,10 +632,7 @@
       distance: optNum(f.distance.value),
       notes: f.notes.value.trim(),
     });
-    store.set("carscout.shortlist", shortlist);
     f.reset();
-    renderShortlist();
-    toast("Added to shortlist.");
   });
 
   $("#shortlist-table").addEventListener("click", (e) => {

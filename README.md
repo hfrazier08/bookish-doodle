@@ -9,6 +9,11 @@ A static website that makes car shopping easier: enter what you want once and ge
   CarsDirect, CARFAX, Carvana, CarMax, AutoNation, CarBravo, Facebook Marketplace, Craigslist, OfferUp,
   eBay Motors, PrivateAuto, Hertz / Enterprise / Avis Car Sales, Cars & Bids, Bring a Trailer, Copart, IAA,
   Hemmings and ClassicCars.com. Open them one by one, by category, or all at once.
+- **Listings with photos in one place**: dealer listings from across the US appear in a photo grid on the
+  page, with price, mileage, distance, days listed, 1-owner and clean-title flags, and a "below / above
+  similar" price tag. You can sort them, load more, and save any of them to your shortlist in one click.
+  They come from the [MarketCheck API](https://www.marketcheck.com/apis): paste your own API key into the
+  page and it's stored only in your browser.
 - **Honest filter chips** — each site card shows which of your filters its link carries and which you need to
   set on that site.
 - **Shareable searches** — the search is saved in the URL, so a link reopens it.
@@ -22,11 +27,12 @@ A static website that makes car shopping easier: enter what you want once and ge
 
 The shortlist, checklist and settings are saved in your browser's `localStorage`. Nothing is sent to a server.
 
-## Why deep links instead of scraping?
+## Where the listings come from
 
-Most car sites don't offer a public API. They also block scraping, both in their terms and technically.
-Linking into each site's own search keeps the site legal, free to host and always up to date. Listings stay
-on the original site, where the buyer contacts the seller anyway.
+Car sites don't offer a public API, and they block scraping in their terms and technically. So the photo
+grid uses MarketCheck, a licensed service that collects US dealer inventory and allows requests straight
+from the browser. Private-seller sites (Facebook Marketplace, Craigslist, OfferUp), auctions and classic
+sites aren't in MarketCheck's data. For those, the page still builds a search link on each site.
 
 ## Run it
 
