@@ -25,7 +25,7 @@ A static website that makes car shopping easier: enter what you want once and ge
   monthly budget allows.
 - **Buying checklist** — covers budget, research, inspection, negotiation and paperwork.
 
-The shortlist, checklist and settings are saved in your browser's `localStorage`. Nothing is sent to a server.
+The shortlist, checklist, settings and API key are saved in your browser's `localStorage`. There is no CarScout server: searches go straight from your browser to MarketCheck and NHTSA.
 
 ## Where the listings come from
 
