@@ -115,7 +115,7 @@
           <p class="muted" id="result-summary"></p>
         </div>
         <div class="results-actions">
-          <button type="button" id="open-all" class="btn primary">Open all in new tabs</button>
+          <button type="button" id="open-all" class="btn primary">Open all sites</button>
           <button type="button" id="copy-link" class="btn ghost">Copy share link</button>
         </div>
       </div>
@@ -159,7 +159,7 @@
       <h3 class="sites-title">Search each site directly</h3>
       <p class="muted sites-sub">Private sellers (Facebook Marketplace, Craigslist, OfferUp), auctions and
         classic-car sites aren't in the listings above. Check them here.</p>
-      <p class="hint muted">Tip: your browser may ask you to allow pop-ups the first time you use “Open all”.
+      <p class="hint muted">“Open all” steps you through the sites one tap at a time, so pop-up blockers don’t get in the way.
         Each card shows which of your filters that site accepts — <span class="chip on">applied</span> vs
         <span class="chip off">set it there</span>.</p>
 
@@ -312,6 +312,21 @@
       are set by those sites. Always inspect a car in person and verify the VIN before paying.
     </div>
   </footer>
+
+  <!-- Opens sites one per tap: browsers allow only one new tab per click. -->
+  <dialog id="opener" class="modal" aria-labelledby="opener-title">
+    <div class="modal-head">
+      <h3 id="opener-title">Open sites</h3>
+      <button type="button" class="btn small ghost" data-close aria-label="Close">✕</button>
+    </div>
+    <div id="popup-help" class="popup-help" hidden></div>
+    <p class="muted small" id="opener-sub">Browsers only allow one new tab per tap, so open them one at a time.</p>
+    <button type="button" id="opener-next" class="btn primary block"></button>
+    <ol id="opener-list" class="opener-list"></ol>
+    <div class="actions">
+      <button type="button" id="opener-copy" class="btn small ghost">Copy all links</button>
+    </div>
+  </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
 

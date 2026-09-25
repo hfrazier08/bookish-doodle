@@ -162,7 +162,7 @@
       const cards = sources
         .map((s) => {
           const url = s.url(c);
-          currentLinks.push(url);
+          currentLinks.push({ name: s.name, url });
           const chips = [...on]
             .map((f) => {
               const applied = s.filters.includes(f);
@@ -203,24 +203,152 @@
     loadListings(c, true);
   }
 
-  function openMany(urls) {
-    let blocked = 0;
-    for (const u of urls) {
-      // Not passing "noopener" so a blocked pop-up is detectable (null); we cut the opener link ourselves.
-      const w = window.open(u, "_blank");
-      if (w) w.opener = null;
-      else blocked++;
-    }
-    toast(blocked ? "Some tabs were blocked — allow pop-ups for this site." : `Opening ${urls.length} tabs…`);
+  // ---------- Opening sites without fighting pop-up blockers ----------
+  //
+  // Browsers allow one new tab per click, and some (in-app browsers, sandboxed frames) allow none.
+  // Every external link goes through tryOpen(): if the tab is blocked we explain how to allow
+  // pop-ups and offer to open the site in this tab. "Open all" steps through sites one tap each.
+
+  const opener = $("#opener");
+  const openerState = { items: [], next: 0 };
+
+  function tryOpen(url) {
+    // Not passing "noopener" so a blocked tab is detectable (null); we cut the opener link ourselves.
+    const w = window.open(url, "_blank");
+    if (!w) return false;
+    try {
+      w.opener = null;
+    } catch {}
+    return true;
   }
+
+  function openHere(url) {
+    try {
+      window.top.location.href = url; // escape any frame this page is shown in
+    } catch {
+      location.href = url;
+    }
+  }
+
+  function popupHelpHtml() {
+    const ua = navigator.userAgent;
+    let steps;
+    if (/iPhone|iPad|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) {
+      steps = "On iPhone or iPad, open the <strong>Settings</strong> app → <strong>Apps</strong> → <strong>Safari</strong> and turn off <strong>Block Pop-ups</strong>.";
+    } else if (/Android/.test(ua)) {
+      steps = "In Chrome, tap <strong>Always show</strong> on the \u201cpop-up blocked\u201d message, or tap <strong>⋮</strong> → <strong>Settings</strong> → <strong>Site settings</strong> → <strong>Pop-ups and redirects</strong> and allow this site.";
+    } else if (/Firefox\//.test(ua)) {
+      steps = "Click <strong>Settings</strong> (or <strong>Options</strong>) on the yellow bar at the top of the page, then <strong>Allow pop-ups for this site</strong>.";
+    } else if (/Safari\//.test(ua) && !/Chrome|Chromium|Edg\//.test(ua)) {
+      steps = "Go to <strong>Safari</strong> → <strong>Settings</strong> → <strong>Websites</strong> → <strong>Pop-up Windows</strong> and set this site to <strong>Allow</strong>.";
+    } else {
+      steps = "Click the blocked pop-up icon at the right end of the address bar, choose <strong>Always allow pop-ups and redirects</strong> from this site, then <strong>Done</strong>.";
+    }
+    const framed = window.top !== window.self;
+    return `<p><strong>Your browser blocked the new tab.</strong> ${steps}</p>
+      ${framed ? `<p class="small">If you're viewing CarScout inside another app or page, open it directly in your browser instead.</p>` : ""}
+      <p class="small">Or open the site in this tab instead. Press Back to return here.</p>`;
+  }
+
+  function renderOpener() {
+    const { items, next } = openerState;
+    const done = next >= items.length;
+    $("#opener-next").textContent = done
+      ? "All done ✓"
+      : `Open ${items[next].name} ↗  (${next + 1} of ${items.length})`;
+    $("#opener-next").disabled = done;
+    $("#opener-list").innerHTML = items
+      .map(
+        (it, i) => `<li class="${i < next ? "done" : ""}">
+          <a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer" data-idx="${i}">${escapeHtml(it.name)}</a>
+          <button type="button" class="btn small ghost" data-here="${i}">Open here</button>
+        </li>`
+      )
+      .join("");
+  }
+
+  function showBlocked(show) {
+    const help = $("#popup-help");
+    help.hidden = !show;
+    if (show) help.innerHTML = popupHelpHtml();
+  }
+
+  function showOpener(items, title) {
+    openerState.items = items;
+    openerState.next = 0;
+    $("#opener-title").textContent = title;
+    $("#opener-sub").hidden = items.length < 2;
+    showBlocked(false);
+    renderOpener();
+    if (!opener.open) opener.showModal();
+  }
+
+  // Open the next site in the queue. Runs inside a click, so the browser allows exactly one tab.
+  function openNext() {
+    const it = openerState.items[openerState.next];
+    if (!it) return;
+    if (tryOpen(it.url)) {
+      openerState.next++;
+      showBlocked(false);
+      renderOpener();
+    } else {
+      showBlocked(true);
+    }
+  }
+
+  function openSites(items, title) {
+    showOpener(items, title);
+    openNext(); // the click that got us here can open the first site
+  }
+
+  $("#opener-next").addEventListener("click", openNext);
+  opener.addEventListener("click", (e) => {
+    if (e.target === opener || e.target.closest("[data-close]")) return opener.close();
+    const here = e.target.closest("[data-here]");
+    if (here) openHere(openerState.items[Number(here.dataset.here)].url);
+  });
+  $("#opener-copy").addEventListener("click", async () => {
+    const text = openerState.items.map((it) => `${it.name}: ${it.url}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      toast("Links copied.");
+    } catch {
+      prompt("Copy these links:", text);
+    }
+  });
+
+  // Every new-tab link on the page goes through tryOpen so a blocked tab is never silent.
+  document.addEventListener("click", (e) => {
+    const a = e.target.closest('a[target="_blank"]');
+    if (!a || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+    e.preventDefault();
+    const inOpener = opener.contains(a);
+    if (tryOpen(a.href)) {
+      if (inOpener && Number(a.dataset.idx) >= openerState.next) {
+        openerState.next = Number(a.dataset.idx) + 1;
+        renderOpener();
+      }
+      if (inOpener) showBlocked(false);
+      return;
+    }
+    if (!inOpener) {
+      const name = (a.closest(".source-card, .listing")?.querySelector("h4")?.textContent || a.textContent).replace("↗", "").trim();
+      showOpener([{ name, url: a.href }], `Open ${name}`);
+    }
+    showBlocked(true);
+  });
 
   $("#result-groups").addEventListener("click", (e) => {
     const btn = e.target.closest("[data-open-cat]");
     if (!btn) return;
     const c = readCriteria();
-    openMany(SOURCES.filter((s) => s.category === btn.dataset.openCat).map((s) => s.url(c)));
+    const cat = CATEGORIES.find((x) => x.id === btn.dataset.openCat);
+    openSites(
+      SOURCES.filter((s) => s.category === cat.id).map((s) => ({ name: s.name, url: s.url(c) })),
+      cat.label
+    );
   });
-  $("#open-all").addEventListener("click", () => openMany(currentLinks));
+  $("#open-all").addEventListener("click", () => openSites(currentLinks, `Open all ${currentLinks.length} sites`));
 
   function criteriaToQuery(c) {
     const p = new URLSearchParams();
