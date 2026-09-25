@@ -48,7 +48,16 @@
   ];
 
   const form = $("#search-form");
-  const FIELDS = ["condition", "make", "model", "zip", "radius", "yearMin", "yearMax", "priceMin", "priceMax", "milesMax", "clRegion"];
+  const FIELDS = [
+    "condition", "make", "model", "zip", "radius", "yearMin", "yearMax", "priceMin", "priceMax", "milesMax", "clRegion",
+    "body", "drive", "fuel", "trans", "color", "trim", "oneOwner", "cleanTitle",
+  ];
+  // Read or write a field, treating checkboxes as "1" / "".
+  const fieldValue = (f) => (form[f].type === "checkbox" ? (form[f].checked ? "1" : "") : (form[f].value || "").trim());
+  const setField = (f, v) => {
+    if (form[f].type === "checkbox") form[f].checked = !!v;
+    else form[f].value = v;
+  };
   const FILTER_LABELS = {
     condition: "Condition",
     make: "Make",
@@ -108,7 +117,7 @@
 
   function readCriteria() {
     const c = {};
-    for (const f of FIELDS) c[f] = (form[f].value || "").trim();
+    for (const f of FIELDS) c[f] = fieldValue(f);
     // Swap reversed ranges so every site gets a sane query.
     for (const [lo, hi] of [["yearMin", "yearMax"], ["priceMin", "priceMax"]]) {
       if (c[lo] && c[hi] && Number(c[lo]) > Number(c[hi])) [c[lo], c[hi]] = [c[hi], c[lo]];
@@ -117,7 +126,7 @@
   }
 
   function writeCriteria(c) {
-    for (const f of FIELDS) if (c[f] !== undefined) form[f].value = c[f];
+    for (const f of FIELDS) if (c[f] !== undefined) setField(f, c[f]);
   }
 
   // Which of the user's filters were actually set, as filter keys used in sources.js.
@@ -430,6 +439,15 @@
     if (c.yearMin || c.yearMax) p.set("year_range", `${c.yearMin || 1900}-${c.yearMax || new Date().getFullYear() + 1}`);
     if (c.priceMin || c.priceMax) p.set("price_range", `${c.priceMin || 0}-${c.priceMax || 10000000}`);
     if (c.milesMax) p.set("miles_range", `0-${c.milesMax}`);
+    // Finer filters (MarketCheck field names; values match case-insensitively).
+    if (c.body) p.set("body_type", c.body);
+    if (c.drive) p.set("drivetrain", c.drive);
+    if (c.trans) p.set("transmission", c.trans);
+    if (c.fuel) p.set("fuel_type", c.fuel === "Gasoline" ? "Unleaded" : c.fuel);
+    if (c.color) p.set("base_exterior_color", c.color);
+    if (c.trim) p.set("trim", c.trim);
+    if (c.oneOwner) p.set("carfax_1_owner", "true");
+    if (c.cleanTitle) p.set("carfax_clean_title", "true");
     const [sortBy, order] = $("#listings-sort").value.split(":");
     if (sortBy && sortBy !== "deal" && !(sortBy === "dist" && !c.zip)) {
       p.set("sort_by", sortBy);
@@ -492,6 +510,7 @@
       listingsState.total = data.num_found || listingsState.items.length;
       listingsState.start += PAGE_SIZE;
       renderListings();
+      afterListingsLoaded();
     } catch (err) {
       if (id !== listingsState.requestId) return;
       if (reset) grid.innerHTML = "";
@@ -513,6 +532,8 @@
       model: b.model,
       trim: b.trim,
       price: Number(l.price) || null,
+      // MarketCheck's ref_price is the listing's previous asking price, when it has changed.
+      prevPrice: Number(l.ref_price) || null,
       miles: Number.isFinite(Number(l.miles)) && l.miles !== null ? Number(l.miles) : null,
       photo: (l.media && l.media.photo_links && l.media.photo_links[0]) || "",
       photoCount: (l.media && l.media.photo_links && l.media.photo_links.length) || 0,
@@ -662,6 +683,127 @@
     box.hidden = false;
   }
 
+  // ---------- Recalls per listing (NHTSA) ----------
+  // One request per year/make/model in the results, cached so re-renders and repeat searches are free.
+  const recallCache = store.get("carscout.recalls", {});
+  const recallKey = (it) => `${it.year}|${it.make}|${it.model}`.toLowerCase();
+
+  async function loadRecalls(items) {
+    const todo = [...new Set(items.filter((it) => it.year && it.make && it.model).map(recallKey))]
+      .filter((k) => !(k in recallCache))
+      .slice(0, 12);
+    if (!todo.length) return;
+    await Promise.all(
+      todo.map(async (k) => {
+        const [year, make, model] = k.split("|");
+        try {
+          const res = await fetch(
+            `https://api.nhtsa.gov/recalls/recallsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${year}`
+          );
+          if (res.ok) recallCache[k] = ((await res.json()).results || []).length;
+        } catch {
+          /* offline or blocked: just no recall tag */
+        }
+      })
+    );
+    store.set("carscout.recalls", recallCache);
+    renderListings();
+  }
+
+  // ---------- New listings & price drops since the last visit ----------
+  // Snapshot taken once per page load, so badges stay put while the buyer browses this session.
+  const seenAtLoad = store.get("carscout.seen", {});
+  const hadHistory = Object.keys(seenAtLoad).length > 0;
+
+  function rememberSeen(items) {
+    const seen = store.get("carscout.seen", {});
+    for (const it of items) if (it.id && it.price) seen[it.id] = it.price;
+    const ids = Object.keys(seen);
+    if (ids.length > 3000) for (const id of ids.slice(0, ids.length - 3000)) delete seen[id];
+    store.set("carscout.seen", seen);
+  }
+
+  function priceDrop(it) {
+    const before = Math.max(seenAtLoad[it.id] || 0, it.prevPrice || 0);
+    return it.price && before > it.price ? before - it.price : 0;
+  }
+
+  // ---------- Negotiation helper ----------
+  function comparables(it) {
+    return listingsState.items.filter(
+      (o) =>
+        o !== it && o.price && o.price < it.price &&
+        `${o.make}|${o.model}`.toLowerCase() === `${it.make}|${it.model}`.toLowerCase() &&
+        o.year >= it.year && (it.miles === null || o.miles === null || o.miles <= it.miles * 1.1)
+    );
+  }
+
+  function openOffer(it) {
+    const deal = computeDeals(listingsState.items).get(it);
+    const dom = it.daysOnMarket || 0;
+    const base = deal ? Math.min(it.price, deal.expected) : it.price;
+    // Cars that have sat longer have more room to negotiate.
+    const room = dom >= 60 ? 0.07 : dom >= 30 ? 0.05 : 0.03;
+    const round100 = (n) => Math.floor(n / 100) * 100;
+    const target = Math.min(it.price, round100(base * (1 - room)));
+    const opening = Math.min(target, round100(base * (1 - room - 0.03)));
+    const comps = comparables(it).sort((a, b) => a.price - b.price);
+    const drop = priceDrop(it);
+
+    const points = [
+      deal && deal.savings < 0 && `It's priced about ${money(-deal.savings)} above similar ${it.make} ${it.model}s for its year and mileage (market ≈ ${money(deal.expected)}).`,
+      deal && deal.savings >= 0 && `It's already ${money(deal.savings)} below market, so expect less room. Focus on fees and add-ons.`,
+      dom >= 30 && `It's been listed for ${dom} days. Dealers pay to hold inventory and are more flexible after 30–60 days.`,
+      drop && `The price has already dropped ${money(drop)}, which shows the seller is motivated.`,
+      comps.length && `${comps.length} comparable listing${comps.length > 1 ? "s" : ""} (same or newer, similar miles) cost less. The cheapest is ${money(comps[0].price)} at ${comps[0].dealer || "another dealer"}.`,
+      "Negotiate the out-the-door price by email, and decline add-ons you didn't ask for (paint protection, VIN etching, nitrogen tires).",
+      "Arrive with a pre-approved loan from a bank or credit union so the dealer has a rate to beat.",
+    ].filter(Boolean);
+
+    const msg = `Hi,
+
+I'm interested in the ${it.title}${it.vin ? ` (VIN ${it.vin})` : ""} listed at ${money(it.price)}.
+${deal && deal.savings < 0 ? `\nComparable ${it.make} ${it.model}s in the area with similar year and mileage are listing for around ${money(deal.expected)}.` : ""}${comps.length ? `${deal && deal.savings < 0 ? " " : "\n"}I've also found ${comps.length} similar one${comps.length > 1 ? "s" : ""} listed for less.` : ""}${dom >= 30 ? ` I see it's been on the lot for ${dom} days.` : ""}
+
+I'm ready to buy this week and would like to offer ${money(opening)} for the car, plus tax, title and registration. Could you confirm it's still available and send me an itemized out-the-door quote?
+
+Thanks!`.replace(/\n{3,}/g, "\n\n");
+
+    $("#offer-title").textContent = `Make an offer: ${it.title}`;
+    $("#offer-body").innerHTML = `
+      <div class="offer-stats">
+        <div><span class="muted small">Asking</span><strong>${money(it.price)}</strong></div>
+        <div><span class="muted small">Market estimate</span><strong>${deal ? money(deal.expected) : "—"}</strong></div>
+        <div class="hi"><span class="muted small">Open with</span><strong>${money(opening)}</strong></div>
+        <div class="hi"><span class="muted small">Aim to pay</span><strong>${money(target)}</strong></div>
+      </div>
+      <h4>Your leverage</h4>
+      <ul class="points">${points.map((p) => `<li>${escapeHtml(p)}</li>`).join("")}</ul>
+      <h4>Message to send the seller</h4>
+      <textarea id="offer-msg" rows="10">${escapeHtml(msg)}</textarea>
+      <div class="actions">
+        <button type="button" class="btn primary" id="offer-copy">Copy message</button>
+        <a class="btn ghost" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">Open listing ↗</a>
+      </div>
+      <p class="muted small">Suggestions are estimates from the listings loaded here, not a guarantee. Always confirm the
+        out-the-door price in writing before visiting.</p>`;
+    $("#offer-copy").addEventListener("click", async () => {
+      const text = $("#offer-msg").value;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("Message copied. Paste it into the dealer's contact form or email.");
+      } catch {
+        $("#offer-msg").select();
+        toast("Select-all is on. Copy it with your keyboard or long-press.");
+      }
+    });
+    $("#offer-modal").showModal();
+  }
+
+  $("#offer-modal").addEventListener("click", (e) => {
+    if (e.target === e.currentTarget || e.target.closest("[data-close]")) e.currentTarget.close();
+  });
+
   function renderListings() {
     const { items, total } = listingsState;
     const grid = $("#listings-grid");
@@ -684,11 +826,18 @@
               Math.abs(deal.savings) >= 100 ? ` · ${money(Math.abs(deal.savings))} ${deal.savings > 0 ? "below" : "above"}` : ""
             }</span>`
           : "";
+        const drop = priceDrop(it);
+        const recalls = recallCache[recallKey(it)];
         const tags = [
+          hadHistory && it.id && !(it.id in seenAtLoad) && `<span class="tag new">New</span>`,
+          drop && `<span class="tag good">↓ ${money(drop)} price drop</span>`,
           dealTag,
           it.oneOwner && `<span class="tag">1 owner</span>`,
           it.cleanTitle && `<span class="tag">Clean title</span>`,
+          recalls > 0 &&
+            `<button type="button" class="tag warn" data-recall="${i}" title="See the recalls and check this VIN">⚠ ${recalls} recall${recalls > 1 ? "s" : ""}</button>`,
         ].filter(Boolean).join("");
+        const monthly = it.price ? financeFor(it.price, payInputs()).monthly : 0;
         const meta = [
           it.miles !== null && `${num(it.miles)} mi`,
           it.dist !== null && `${it.dist} mi away`,
@@ -703,14 +852,17 @@
               ${it.photoCount > 1 ? `<span class="photo-count">📷 ${it.photoCount}</span>` : ""}
             </a>
             <div class="listing-body">
-              <div class="listing-price">${it.price ? money(it.price) : "Call for price"}</div>
+              <div class="listing-price">${it.price ? money(it.price) : "Call for price"}${
+                monthly ? ` <span class="per-month" title="Using your payment calculator settings">≈ ${money(monthly)}/mo</span>` : ""
+              }</div>
               <h4><a href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(it.title)}</a></h4>
               <p class="muted small">${escapeHtml(meta)}</p>
               ${tags ? `<div class="tags">${tags}</div>` : ""}
               <p class="muted small listing-dealer">${escapeHtml([it.dealer, it.place].filter(Boolean).join(" — "))}</p>
               <div class="listing-actions">
-                <a class="btn small primary" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">View listing ↗</a>
-                <button type="button" class="btn small ghost" data-save="${i}">♡ Save</button>
+                <a class="btn small primary" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">View ↗</a>
+                <button type="button" class="btn small ghost" data-save="${i}" aria-label="Save to shortlist">♡</button>
+                ${it.price ? `<button type="button" class="btn small ghost" data-offer="${i}">💬 Offer</button>` : ""}
               </div>
             </div>
           </article>`;
@@ -720,7 +872,27 @@
     $("#listings-more").hidden = items.length >= total;
   }
 
+  // Runs once per fetched page (not on re-renders) so "seen" reflects what the buyer was shown.
+  function afterListingsLoaded() {
+    rememberSeen(listingsState.items);
+    loadRecalls(listingsState.items);
+  }
+
   $("#listings-grid").addEventListener("click", (e) => {
+    const offer = e.target.closest("[data-offer]");
+    if (offer) return openOffer(listingsState.items[Number(offer.dataset.offer)]);
+    const rc = e.target.closest("[data-recall]");
+    if (rc) {
+      const it = listingsState.items[Number(rc.dataset.recall)];
+      const f = $("#recall-form");
+      f.year.value = it.year;
+      f.make.value = it.make;
+      f.model.value = it.model;
+      if (it.vin) $("#vin-form").vin.value = it.vin;
+      $("#vin").scrollIntoView({ behavior: "smooth" });
+      f.requestSubmit();
+      return;
+    }
     const btn = e.target.closest("[data-save]");
     if (!btn) return;
     const it = listingsState.items[Number(btn.dataset.save)];
@@ -734,7 +906,7 @@
       distance: it.dist,
       notes: [it.dealer, it.place, it.vin && `VIN ${it.vin}`].filter(Boolean).join(" · "),
     });
-    btn.textContent = "♥ Saved";
+    btn.textContent = "♥";
     btn.disabled = true;
   });
 
@@ -832,6 +1004,7 @@
 
     store.set("carscout.payment", p);
     renderShortlist();
+    if (listingsState.items.length) renderListings();
   }
 
   (() => {

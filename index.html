@@ -87,7 +87,48 @@
           </div>
 
           <details class="more">
-            <summary>More options</summary>
+            <summary>More filters</summary>
+            <div class="grid filters-grid">
+              <label>Body style
+                <select name="body">
+                  <option value="">Any</option>
+                  <option>SUV</option><option>Sedan</option><option>Pickup</option><option>Hatchback</option>
+                  <option>Coupe</option><option>Minivan</option><option>Wagon</option><option>Convertible</option>
+                </select>
+              </label>
+              <label>Drivetrain
+                <select name="drive">
+                  <option value="">Any</option>
+                  <option value="AWD">AWD</option><option value="4WD">4WD</option>
+                  <option value="FWD">FWD</option><option value="RWD">RWD</option>
+                </select>
+              </label>
+              <label>Fuel
+                <select name="fuel">
+                  <option value="">Any</option>
+                  <option>Gasoline</option><option>Hybrid</option><option value="Electric">Electric</option>
+                  <option>Diesel</option>
+                </select>
+              </label>
+              <label>Transmission
+                <select name="trans">
+                  <option value="">Any</option><option>Automatic</option><option>Manual</option>
+                </select>
+              </label>
+              <label>Color
+                <select name="color">
+                  <option value="">Any</option>
+                  <option>Black</option><option>White</option><option>Gray</option><option>Silver</option>
+                  <option>Blue</option><option>Red</option><option>Green</option><option>Brown</option>
+                </select>
+              </label>
+              <label>Trim
+                <input name="trim" placeholder="e.g. XLE, Sport" />
+              </label>
+              <label class="check-inline"><input type="checkbox" name="oneOwner" value="1" /> 1 owner only</label>
+              <label class="check-inline"><input type="checkbox" name="cleanTitle" value="1" /> Clean title only</label>
+            </div>
+            <p class="muted small">These filters apply to the listings with photos.</p>
             <div class="grid">
               <label>Craigslist region (optional)
                 <input name="clRegion" placeholder="e.g. atlanta, sfbay, newyork" />
@@ -328,6 +369,15 @@
     <div class="actions">
       <button type="button" id="opener-copy" class="btn small ghost">Copy all links</button>
     </div>
+  </dialog>
+
+  <!-- Negotiation helper for one listing -->
+  <dialog id="offer-modal" class="modal wide" aria-labelledby="offer-title">
+    <div class="modal-head">
+      <h3 id="offer-title">Make an offer</h3>
+      <button type="button" class="btn small ghost" data-close aria-label="Close">✕</button>
+    </div>
+    <div id="offer-body"></div>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>

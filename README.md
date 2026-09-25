@@ -14,6 +14,16 @@ A static website that makes car shopping easier: enter what you want once and ge
   similar" price tag. You can sort them, load more, and save any of them to your shortlist in one click.
   They come from the [MarketCheck API](https://www.marketcheck.com/apis): paste your own API key into the
   page and it's stored only in your browser.
+- **Best-deal ranking**: each car's price is compared with a market estimate built from similar listings
+  (same make and model, adjusted for year and mileage). Cars are rated Great deal, Good deal, Fair price or
+  Above market, sorted by best deal, with Top picks for best deal, lowest price, lowest miles and closest.
+- **Make an offer**: suggests an opening offer and a target price for any listing, lists your leverage
+  (days listed, price drops, cheaper comparable cars), and writes a ready-to-send message to the dealer.
+- **Recall warnings** on every listing (NHTSA). Tap one to see the recalls and check that car's VIN.
+- **Real monthly cost** on every card, using your payment calculator settings.
+- **New & price-drop badges**: listings that are new since your last visit or have dropped in price.
+- **Finer filters** for the photo listings: body style, drivetrain, fuel, transmission, color, trim,
+  1-owner and clean title.
 - **Honest filter chips** — each site card shows which of your filters its link carries and which you need to
   set on that site.
 - **Shareable searches** — the search is saved in the URL, so a link reopens it.
