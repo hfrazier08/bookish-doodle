@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CarScout – Search Every Car Site at Once</title>
+  <meta name="description" content="Enter what you want once and search Autotrader, Cars.com, CarGurus, Carvana, CarMax, Facebook Marketplace, Craigslist, eBay Motors and 20+ more car sites in one click." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚗</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#search">🚗 CarScout</a>
+      <nav class="nav" aria-label="Main">
+        <a href="#search">Search</a>
+        <a href="#shortlist">Shortlist</a>
+        <a href="#vin">VIN &amp; recalls</a>
+        <a href="#payment">Payment</a>
+        <a href="#checklist">Checklist</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ SEARCH ============ -->
+    <section id="search" class="hero">
+      <div class="wrap">
+        <h1>Search every car site at once.</h1>
+        <p class="lede">Tell us what you want once. We build a pre-filled search on
+          <strong id="source-count">25+</strong> marketplaces, dealers, online retailers,
+          private-seller sites and auctions, and show dealer listings with photos right here, so nothing slips through.</p>
+
+        <form id="search-form" class="card search-form" autocomplete="off">
+          <div class="grid">
+            <label>Condition
+              <select name="condition">
+                <option value="any">New &amp; used</option>
+                <option value="used" selected>Used</option>
+                <option value="cpo">Certified pre-owned</option>
+                <option value="new">New</option>
+              </select>
+            </label>
+            <label>Make
+              <input name="make" list="makes" placeholder="Any make (e.g. Toyota)" />
+              <datalist id="makes"></datalist>
+            </label>
+            <label>Model
+              <input name="model" list="models" placeholder="Any model (e.g. RAV4)" />
+              <datalist id="models"></datalist>
+            </label>
+            <label>ZIP code
+              <input name="zip" inputmode="numeric" pattern="\d{5}" maxlength="5" placeholder="e.g. 30301" />
+            </label>
+            <label>Distance
+              <select name="radius">
+                <option value="25">25 miles</option>
+                <option value="50" selected>50 miles</option>
+                <option value="100">100 miles</option>
+                <option value="200">200 miles</option>
+                <option value="500">500 miles</option>
+              </select>
+            </label>
+            <fieldset class="range">
+              <legend>Year</legend>
+              <input name="yearMin" type="number" min="1900" max="2100" placeholder="Min" aria-label="Minimum year" />
+              <span>–</span>
+              <input name="yearMax" type="number" min="1900" max="2100" placeholder="Max" aria-label="Maximum year" />
+            </fieldset>
+            <fieldset class="range">
+              <legend>Price ($)</legend>
+              <input name="priceMin" type="number" min="0" step="500" placeholder="Min" aria-label="Minimum price" />
+              <span>–</span>
+              <input name="priceMax" type="number" min="0" step="500" placeholder="Max" aria-label="Maximum price" />
+            </fieldset>
+            <label>Max mileage
+              <select name="milesMax">
+                <option value="">Any</option>
+                <option value="15000">15,000</option>
+                <option value="30000">30,000</option>
+                <option value="50000">50,000</option>
+                <option value="75000">75,000</option>
+                <option value="100000">100,000</option>
+                <option value="150000">150,000</option>
+              </select>
+            </label>
+          </div>
+
+          <details class="more">
+            <summary>More filters</summary>
+            <div class="grid filters-grid">
+              <label>Body style
+                <select name="body">
+                  <option value="">Any</option>
+                  <option>SUV</option><option>Sedan</option><option>Pickup</option><option>Hatchback</option>
+                  <option>Coupe</option><option>Minivan</option><option>Wagon</option><option>Convertible</option>
+                </select>
+              </label>
+              <label>Drivetrain
+                <select name="drive">
+                  <option value="">Any</option>
+                  <option value="AWD">AWD</option><option value="4WD">4WD</option>
+                  <option value="FWD">FWD</option><option value="RWD">RWD</option>
+                </select>
+              </label>
+              <label>Fuel
+                <select name="fuel">
+                  <option value="">Any</option>
+                  <option>Gasoline</option><option>Hybrid</option><option value="Electric">Electric</option>
+                  <option>Diesel</option>
+                </select>
+              </label>
+              <label>Transmission
+                <select name="trans">
+                  <option value="">Any</option><option>Automatic</option><option>Manual</option>
+                </select>
+              </label>
+              <label>Color
+                <select name="color">
+                  <option value="">Any</option>
+                  <option>Black</option><option>White</option><option>Gray</option><option>Silver</option>
+                  <option>Blue</option><option>Red</option><option>Green</option><option>Brown</option>
+                </select>
+              </label>
+              <label>Trim
+                <input name="trim" placeholder="e.g. XLE, Sport" />
+              </label>
+              <label class="check-inline"><input type="checkbox" name="oneOwner" value="1" /> 1 owner only</label>
+              <label class="check-inline"><input type="checkbox" name="cleanTitle" value="1" /> Clean title only</label>
+            </div>
+            <p class="muted small">These filters apply to the listings with photos.</p>
+            <div class="grid">
+              <label>Craigslist region (optional)
+                <input name="clRegion" placeholder="e.g. atlanta, sfbay, newyork" />
+                <small>Only needed without a ZIP code: the word before “.craigslist.org” for your city.</small>
+              </label>
+              <div class="cat-picks">
+                <span class="label-text">Include</span>
+                <div id="category-picks" class="chips"></div>
+              </div>
+            </div>
+          </details>
+
+          <div class="actions">
+            <button type="submit" class="btn primary">Find cars everywhere</button>
+            <button type="button" id="reset-search" class="btn ghost">Clear</button>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <section id="results" class="wrap" hidden>
+      <div class="results-head">
+        <div>
+          <h2>Your search on <span id="result-count"></span> sites</h2>
+          <p class="muted" id="result-summary"></p>
+        </div>
+        <div class="results-actions">
+          <button type="button" id="open-all" class="btn primary">Open all sites</button>
+          <button type="button" id="copy-link" class="btn ghost">Copy share link</button>
+        </div>
+      </div>
+      <!-- Live listings with photos (MarketCheck API) -->
+      <div id="listings" class="listings">
+        <div class="listings-head">
+          <h3 id="listings-title">Listings</h3>
+          <div class="listings-controls" id="listings-controls" hidden>
+            <label class="inline">Sort
+              <select id="listings-sort">
+                <option value="deal" selected>Best deal</option>
+                <option value="">Best match</option>
+                <option value="price:asc">Price: low to high</option>
+                <option value="price:desc">Price: high to low</option>
+                <option value="miles:asc">Mileage: lowest</option>
+                <option value="dist:asc">Distance: nearest</option>
+                <option value="year:desc">Year: newest</option>
+              </select>
+            </label>
+            <button type="button" class="btn small ghost" id="listings-key-change">API key</button>
+          </div>
+        </div>
+
+        <form id="key-form" class="card key-card" hidden>
+          <h4>See listings with photos right here</h4>
+          <p class="muted">Car sites don't let other websites load their listings directly, so CarScout uses
+            <a href="https://www.marketcheck.com/apis" target="_blank" rel="noopener">MarketCheck</a>, a
+            licensed data service that collects listings from dealers across the US. Sign up there for a free
+            API key and paste it below. It's saved only in this browser.</p>
+          <div class="key-row">
+            <input name="key" placeholder="Paste your MarketCheck API key" autocomplete="off" required />
+            <button class="btn primary">Save &amp; load listings</button>
+            <button type="button" class="btn ghost" id="key-remove" hidden>Remove key</button>
+          </div>
+        </form>
+
+        <p id="listings-status" class="muted" aria-live="polite"></p>
+        <div id="top-picks" class="top-picks" hidden></div>
+        <div id="listings-grid" class="listings-grid"></div>
+        <div class="actions center"><button type="button" id="listings-more" class="btn ghost" hidden>Load more</button></div>
+      </div>
+
+      <h3 class="sites-title">Search each site directly</h3>
+      <p class="muted sites-sub">Private sellers (Facebook Marketplace, Craigslist, OfferUp), auctions and
+        classic-car sites aren't in the listings above. Check them here.</p>
+      <p class="hint muted">“Open all” steps you through the sites one tap at a time, so pop-up blockers don’t get in the way.
+        Each card shows which of your filters that site accepts — <span class="chip on">applied</span> vs
+        <span class="chip off">set it there</span>.</p>
+
+      <div id="result-groups"></div>
+
+      <div class="card research">
+        <h3>Do your homework on this car</h3>
+        <div id="research-links" class="link-row"></div>
+      </div>
+    </section>
+
+    <!-- ============ SHORTLIST ============ -->
+    <section id="shortlist" class="wrap section">
+      <h2>Shortlist &amp; compare</h2>
+      <p class="muted">Found a good one? Paste it here to compare listings from different sites side by side.
+        Saved in this browser only.</p>
+
+      <form id="shortlist-form" class="card grid shortlist-form">
+        <label class="span-2">Listing URL
+          <input name="url" type="url" required placeholder="https://…" />
+        </label>
+        <label class="span-2">Title
+          <input name="title" required placeholder="2021 Toyota RAV4 XLE" />
+        </label>
+        <label>Price ($)
+          <input name="price" type="number" min="0" required />
+        </label>
+        <label>Mileage
+          <input name="miles" type="number" min="0" />
+        </label>
+        <label>Year
+          <input name="year" type="number" min="1900" max="2100" />
+        </label>
+        <label>Distance (mi)
+          <input name="distance" type="number" min="0" />
+        </label>
+        <label class="span-3">Notes
+          <input name="notes" placeholder="1 owner, clean CARFAX, needs tires…" />
+        </label>
+        <div class="actions end">
+          <button type="submit" class="btn primary">Add to shortlist</button>
+        </div>
+      </form>
+
+      <div class="table-wrap">
+        <table id="shortlist-table">
+          <thead>
+            <tr>
+              <th data-sort="title">Car</th>
+              <th data-sort="price" class="num">Price</th>
+              <th data-sort="miles" class="num">Miles</th>
+              <th data-sort="year" class="num">Year</th>
+              <th data-sort="distance" class="num">Dist.</th>
+              <th data-sort="monthly" class="num" title="Using the settings in the payment calculator">Est. / mo</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="shortlist-empty" class="empty muted">Nothing saved yet.</p>
+      </div>
+      <div class="actions">
+        <button type="button" id="export-csv" class="btn ghost">Export CSV</button>
+      </div>
+    </section>
+
+    <!-- ============ VIN ============ -->
+    <section id="vin" class="wrap section">
+      <h2>VIN decoder &amp; recall check</h2>
+      <p class="muted">Check that a listing matches what the seller claims, and look up open safety recalls.
+        Data from the U.S. National Highway Traffic Safety Administration (NHTSA).</p>
+      <div class="two-col">
+        <form id="vin-form" class="card">
+          <label>VIN (17 characters)
+            <input name="vin" maxlength="17" placeholder="e.g. 1HGCM82633A004352" class="mono" required />
+          </label>
+          <div class="actions"><button class="btn primary">Decode VIN</button></div>
+          <div id="vin-result" class="result-box" aria-live="polite"></div>
+        </form>
+        <form id="recall-form" class="card">
+          <div class="grid three">
+            <label>Year <input name="year" type="number" min="1950" max="2100" required /></label>
+            <label>Make <input name="make" list="makes" required /></label>
+            <label>Model <input name="model" required /></label>
+          </div>
+          <div class="actions"><button class="btn primary">Check recalls</button></div>
+          <div id="recall-result" class="result-box" aria-live="polite"></div>
+        </form>
+      </div>
+      <p class="muted small">For accident and title history, run the VIN through
+        <a href="https://vehiclehistory.bja.ojp.gov/nmvtis_vehiclehistory" target="_blank" rel="noopener">NMVTIS</a>
+        (cheap, official), <a href="https://www.nicb.org/vincheck" target="_blank" rel="noopener">NICB VINCheck</a>
+        (free theft/total-loss check), or <a href="https://www.carfax.com/" target="_blank" rel="noopener">CARFAX</a> /
+        <a href="https://www.autocheck.com/" target="_blank" rel="noopener">AutoCheck</a>.</p>
+    </section>
+
+    <!-- ============ PAYMENT ============ -->
+    <section id="payment" class="wrap section">
+      <h2>Payment &amp; out-the-door calculator</h2>
+      <div class="two-col">
+        <form id="payment-form" class="card grid">
+          <label>Car price ($) <input name="price" type="number" min="0" value="25000" /></label>
+          <label>Down payment ($) <input name="down" type="number" min="0" value="3000" /></label>
+          <label>Trade-in value ($) <input name="trade" type="number" min="0" value="0" /></label>
+          <label>Sales tax (%) <input name="tax" type="number" min="0" step="0.01" value="7" /></label>
+          <label>Dealer &amp; DMV fees ($) <input name="fees" type="number" min="0" value="800" /></label>
+          <label>APR (%) <input name="apr" type="number" min="0" step="0.01" value="7.5" /></label>
+          <label>Term
+            <select name="term">
+              <option value="36">36 months</option>
+              <option value="48">48 months</option>
+              <option value="60" selected>60 months</option>
+              <option value="72">72 months</option>
+              <option value="84">84 months</option>
+            </select>
+          </label>
+          <label>Monthly budget ($) <input name="budget" type="number" min="0" value="450" /></label>
+        </form>
+        <div class="card payment-out" aria-live="polite">
+          <div class="big-stat">
+            <span class="muted">Monthly payment</span>
+            <strong id="pay-monthly">—</strong>
+          </div>
+          <dl class="stats">
+            <div><dt>Out-the-door price</dt><dd id="pay-otd">—</dd></div>
+            <div><dt>Amount financed</dt><dd id="pay-financed">—</dd></div>
+            <div><dt>Total interest</dt><dd id="pay-interest">—</dd></div>
+            <div><dt>Total cost of car</dt><dd id="pay-total">—</dd></div>
+            <div><dt>Max car price for your budget</dt><dd id="pay-afford">—</dd></div>
+          </dl>
+          <p class="muted small">Estimates only. Tax rules on trade-ins vary by state. Get pre-approved at a bank or
+            credit union before visiting a dealer so you have a rate to beat.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CHECKLIST ============ -->
+    <section id="checklist" class="wrap section">
+      <h2>Car-buying checklist</h2>
+      <p class="muted">Tick things off as you go — progress is saved in this browser.</p>
+      <div class="progress"><div id="checklist-bar"></div></div>
+      <div id="checklist-list" class="checklist"></div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap muted small">
+      CarScout links to third-party sites and isn't affiliated with any of them. Listings, prices and availability
+      are set by those sites. Always inspect a car in person and verify the VIN before paying.
+    </div>
+  </footer>
+
+  <!-- Opens sites one per tap: browsers allow only one new tab per click. -->
+  <dialog id="opener" class="modal" aria-labelledby="opener-title">
+    <div class="modal-head">
+      <h3 id="opener-title">Open sites</h3>
+      <button type="button" class="btn small ghost" data-close aria-label="Close">✕</button>
+    </div>
+    <div id="popup-help" class="popup-help" hidden></div>
+    <p class="muted small" id="opener-sub">Browsers only allow one new tab per tap, so open them one at a time.</p>
+    <button type="button" id="opener-next" class="btn primary block"></button>
+    <ol id="opener-list" class="opener-list"></ol>
+    <div class="actions">
+      <button type="button" id="opener-copy" class="btn small ghost">Copy all links</button>
+    </div>
+  </dialog>
+
+  <!-- Negotiation helper for one listing -->
+  <dialog id="offer-modal" class="modal wide" aria-labelledby="offer-title">
+    <div class="modal-head">
+      <h3 id="offer-title">Make an offer</h3>
+      <button type="button" class="btn small ghost" data-close aria-label="Close">✕</button>
+    </div>
+    <div id="offer-body"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/sources.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
