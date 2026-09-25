@@ -431,7 +431,7 @@
     if (c.priceMin || c.priceMax) p.set("price_range", `${c.priceMin || 0}-${c.priceMax || 10000000}`);
     if (c.milesMax) p.set("miles_range", `0-${c.milesMax}`);
     const [sortBy, order] = $("#listings-sort").value.split(":");
-    if (sortBy && !(sortBy === "dist" && !c.zip)) {
+    if (sortBy && sortBy !== "deal" && !(sortBy === "dist" && !c.zip)) {
       p.set("sort_by", sortBy);
       p.set("sort_order", order);
     }
@@ -454,6 +454,7 @@
       listingsState.start = 0;
       listingsState.items = [];
       grid.innerHTML = "";
+      $("#top-picks").hidden = true;
     }
     more.hidden = true;
 
@@ -527,49 +528,166 @@
     };
   }
 
-  // Compare each car to the median price of similar results (same year/make/model) to flag good deals.
-  function dealBadges(items) {
+  // ---------- Deal scoring ----------
+  //
+  // For each make + model in the results, fit price ≈ a + b·year + c·miles (least squares) and compare
+  // every car's asking price with what that fit predicts for its year and mileage. With too few cars
+  // for a fit, fall back to the median price of the same year. Savings > 0 means cheaper than the market.
+
+  function fitPriceModel(cars) {
+    // Normal equations for [1, year, miles] with a tiny ridge term for stability.
+    const X = cars.map((c) => [1, c.year - 2000, c.miles / 10000]);
+    const y = cars.map((c) => c.price);
+    const A = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    const v = [0, 0, 0];
+    X.forEach((row, n) => {
+      for (let i = 0; i < 3; i++) {
+        v[i] += row[i] * y[n];
+        for (let j = 0; j < 3; j++) A[i][j] += row[i] * row[j];
+      }
+    });
+    for (let i = 1; i < 3; i++) A[i][i] += 1e-3;
+    // Solve A·w = v by Gaussian elimination.
+    const M = A.map((r, i) => [...r, v[i]]);
+    for (let i = 0; i < 3; i++) {
+      let piv = i;
+      for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[piv][i])) piv = r;
+      [M[i], M[piv]] = [M[piv], M[i]];
+      if (Math.abs(M[i][i]) < 1e-9) return null;
+      for (let r = 0; r < 3; r++) {
+        if (r === i) continue;
+        const f = M[r][i] / M[i][i];
+        for (let c = i; c < 4; c++) M[r][c] -= f * M[i][c];
+      }
+    }
+    const w = M.map((r, i) => r[3] / r[i]);
+    // Newer should cost more and more miles less; otherwise the data is too thin to trust.
+    if (w[1] < 0 || w[2] > 0) return null;
+    return (c) => w[0] + w[1] * (c.year - 2000) + w[2] * (c.miles / 10000);
+  }
+
+  const median = (arr) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const m = s.length >> 1;
+    return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  };
+
+  function computeDeals(items) {
     const groups = {};
     for (const it of items) {
-      if (!it.price) continue;
-      (groups[`${it.year}|${it.make}|${it.model}`] ||= []).push(it.price);
+      if (!it.price || !it.year) continue;
+      (groups[`${it.make}|${it.model}`.toLowerCase()] ||= []).push(it);
     }
-    const median = (arr) => {
-      const s = [...arr].sort((a, b) => a - b);
-      const m = s.length >> 1;
-      return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-    };
     const out = new Map();
-    for (const it of items) {
-      const prices = groups[`${it.year}|${it.make}|${it.model}`];
-      if (!it.price || !prices || prices.length < 4) continue;
-      const diff = it.price - median(prices);
-      const pct = diff / median(prices);
-      if (pct <= -0.05) out.set(it, { cls: "good", text: `${money(-diff)} below similar` });
-      else if (pct >= 0.1) out.set(it, { cls: "high", text: `${money(diff)} above similar` });
+    for (const cars of Object.values(groups)) {
+      const withMiles = cars.filter((c) => c.miles !== null);
+      const years = new Set(withMiles.map((c) => c.year));
+      const predict = withMiles.length >= 8 && years.size >= 2 ? fitPriceModel(withMiles) : null;
+      for (const it of cars) {
+        let expected = null;
+        let basis = "";
+        if (predict && it.miles !== null) {
+          expected = predict(it);
+          basis = `its year and mileage, from ${withMiles.length} similar listings`;
+        } else {
+          const sameYear = cars.filter((c) => c.year === it.year).map((c) => c.price);
+          if (sameYear.length >= 4) {
+            expected = median(sameYear);
+            basis = `the median of ${sameYear.length} ${it.year} listings`;
+          }
+        }
+        if (!expected || expected <= 0) continue;
+        const savings = expected - it.price;
+        const pct = savings / expected;
+        // Ignore absurd outliers (typos, salvage titles priced far below everything else).
+        if (pct > 0.5) continue;
+        out.set(it, { expected, savings, pct, basis, rating: rate(pct) });
+      }
     }
     return out;
+  }
+
+  function rate(pct) {
+    if (pct >= 0.1) return { cls: "great", label: "Great deal" };
+    if (pct >= 0.04) return { cls: "good", label: "Good deal" };
+    if (pct > -0.05) return { cls: "fair", label: "Fair price" };
+    return { cls: "high", label: "Above market" };
+  }
+
+  function sortedView(items, deals) {
+    const view = items.map((it, i) => ({ it, i }));
+    if ($("#listings-sort").value === "deal") {
+      const s = (x) => (deals.has(x.it) ? deals.get(x.it).savings : -Infinity);
+      view.sort((a, b) => s(b) - s(a));
+    }
+    return view;
+  }
+
+  function renderTopPicks(items, deals) {
+    const box = $("#top-picks");
+    const priced = items.map((it, i) => ({ it, i })).filter((x) => x.it.price);
+    if (priced.length < 3) {
+      box.hidden = true;
+      return;
+    }
+    const best = (score) => priced.reduce((a, b) => (score(b) > score(a) ? b : a));
+    const picks = [];
+    const scored = priced.filter((x) => deals.has(x.it));
+    if (scored.length) {
+      const d = best((x) => (deals.has(x.it) ? deals.get(x.it).savings : -Infinity));
+      const info = deals.get(d.it);
+      if (info.savings > 0) picks.push({ label: "🏆 Best deal", x: d, note: `${money(info.savings)} below market` });
+    }
+    picks.push({ label: "💲 Lowest price", x: best((x) => -x.it.price), note: "" });
+    const withMiles = priced.filter((x) => x.it.miles !== null);
+    if (withMiles.length) picks.push({ label: "🛣️ Lowest miles", x: withMiles.reduce((a, b) => (b.it.miles < a.it.miles ? b : a)), note: "" });
+    const withDist = priced.filter((x) => x.it.dist !== null);
+    if (withDist.length) picks.push({ label: "📍 Closest", x: withDist.reduce((a, b) => (b.it.dist < a.it.dist ? b : a)), note: "" });
+
+    box.innerHTML = `<h4>Top picks</h4><div class="picks">${picks
+      .map(({ label, x, note }) => {
+        const it = x.it;
+        const sub = note || [it.miles !== null && `${num(it.miles)} mi`, it.dist !== null && `${it.dist} mi away`].filter(Boolean).join(" · ");
+        return `<a class="pick" href="${escapeHtml(it.url)}" target="_blank" rel="noopener noreferrer">
+          ${it.photo ? `<img src="${escapeHtml(it.photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()" />` : ""}
+          <span class="pick-body">
+            <span class="pick-label">${label}</span>
+            <strong>${money(it.price)}</strong>
+            <span class="small">${escapeHtml(it.title)}</span>
+            <span class="muted small">${escapeHtml(sub)}</span>
+          </span>
+        </a>`;
+      })
+      .join("")}</div>`;
+    box.hidden = false;
   }
 
   function renderListings() {
     const { items, total } = listingsState;
     const grid = $("#listings-grid");
-    const badges = dealBadges(items);
+    const deals = computeDeals(items);
 
     $("#listings-title").textContent = total
       ? `${num(total)} listing${total === 1 ? "" : "s"} found`
       : "Listings";
     $("#listings-status").textContent = items.length
-      ? `Showing ${num(items.length)} of ${num(total)} dealer listings. Photos and prices come from each dealer's own listing.`
+      ? `Showing ${num(items.length)} of ${num(total)} dealer listings. Deal ratings compare each car with similar ones in these results; loading more makes them more accurate.`
       : "No dealer listings match. Try widening the distance, price or year range.";
 
-    grid.innerHTML = items
-      .map((it, i) => {
-        const badge = badges.get(it);
+    renderTopPicks(items, deals);
+
+    grid.innerHTML = sortedView(items, deals)
+      .map(({ it, i }) => {
+        const deal = deals.get(it);
+        const dealTag = deal
+          ? `<span class="tag ${deal.rating.cls}" title="Market estimate ${money(deal.expected)}, based on ${escapeHtml(deal.basis)}">${deal.rating.label}${
+              Math.abs(deal.savings) >= 100 ? ` · ${money(Math.abs(deal.savings))} ${deal.savings > 0 ? "below" : "above"}` : ""
+            }</span>`
+          : "";
         const tags = [
+          dealTag,
           it.oneOwner && `<span class="tag">1 owner</span>`,
           it.cleanTitle && `<span class="tag">Clean title</span>`,
-          badge && `<span class="tag ${badge.cls}">${badge.text}</span>`,
         ].filter(Boolean).join("");
         const meta = [
           it.miles !== null && `${num(it.miles)} mi`,
@@ -621,7 +739,13 @@
   });
 
   $("#listings-more").addEventListener("click", () => loadListings(listingsState.criteria, false));
+  let lastServerSort = "";
   $("#listings-sort").addEventListener("change", () => {
+    const v = $("#listings-sort").value;
+    const serverSort = v === "deal" ? "" : v;
+    // "Best deal" and "Best match" use the same results, so just re-sort what's loaded.
+    if (serverSort === lastServerSort && listingsState.items.length) return renderListings();
+    lastServerSort = serverSort;
     if (listingsState.criteria) loadListings(listingsState.criteria, true);
   });
   $("#listings-key-change").addEventListener("click", () => showKeyForm($("#key-form").hidden));
